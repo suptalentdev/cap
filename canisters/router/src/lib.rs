@@ -8,6 +8,7 @@ use ic_kit::ic;
 use serde::Serialize;
 
 // It's ok.
+use ic_cdk::export::Principal;
 use ic_history_common::*;
 use ic_kit::macros::*;
 
@@ -76,7 +77,7 @@ fn get_token_contract_root_bucket(
 
 #[query]
 #[candid_method(query)]
-fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse {
+fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse<'static> {
     let data = ic::get::<Data>();
 
     let witness = match arg.witness {
@@ -93,7 +94,7 @@ fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsRespon
         ),
     };
 
-    let contracts = data.user_canisters.get(&arg.user).to_vec();
+    let contracts = data.user_canisters.get(&arg.user);
 
     GetUserRootBucketsResponse { contracts, witness }
 }
@@ -120,6 +121,23 @@ fn get_index_canisters(arg: WithWitnessArg) -> GetIndexCanistersResponse {
     let canisters = data.index_canisters.to_vec();
 
     GetIndexCanistersResponse { canisters, witness }
+}
+
+#[update]
+#[candid_method(update)]
+fn insert_new_users(contract_id: Principal, users: Vec<Principal>) {
+    let data = ic::get_mut::<Data>();
+    let root_bucket = ic::caller();
+
+    assert_eq!(
+        data.root_buckets.get(&contract_id),
+        Some(&root_bucket),
+        "Access denied."
+    );
+
+    for user in users {
+        data.user_canisters.insert(user, root_bucket);
+    }
 }
 
 #[query(name = "__get_candid_interface_tmp_hack")]
