@@ -1,6 +1,4 @@
-use crate::Data;
 use ic_kit::candid::candid_method;
-use ic_kit::candid::encode_one;
 use ic_kit::candid::CandidType;
 use ic_kit::interfaces::{management, Method};
 use ic_kit::{ic, Principal};
@@ -22,16 +20,6 @@ const WASM: &[u8] =
 #[candid_method(update)]
 async fn install_bucket_code(canister_id: RootBucketId) {
     use management::{CanisterStatus, InstallMode, WithCanisterId};
-
-    let data = ic::get_mut::<Data>();
-    let contract_id = ic::caller();
-
-    if data.root_buckets.get(&contract_id).is_some() {
-        panic!(
-            "Contract {} is already registered with a root bucket.",
-            contract_id
-        );
-    }
 
     let (response,) = CanisterStatus::perform(
         Principal::management_canister(),
@@ -60,13 +48,11 @@ async fn install_bucket_code(canister_id: RootBucketId) {
         arg: Vec<u8>,
     }
 
-    let arg = encode_one(contract_id).expect("Failed to serialize the install argument.");
-
     let install_config = InstallCodeArgumentBorrowed {
         mode: InstallMode::Install,
         canister_id,
         wasm_module: WASM,
-        arg,
+        arg: b" ".to_vec(),
     };
 
     let _: () = ic::call(
