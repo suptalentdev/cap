@@ -76,7 +76,7 @@ fn get_token_contract_root_bucket(
 
 #[query]
 #[candid_method(query)]
-fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse {
+fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse<'static> {
     let data = ic::get::<Data>();
 
     let witness = match arg.witness {
@@ -93,7 +93,7 @@ fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsRespon
         ),
     };
 
-    let contracts = data.user_canisters.get(&arg.user).to_vec();
+    let contracts = data.user_canisters.get(&arg.user);
 
     GetUserRootBucketsResponse { contracts, witness }
 }
