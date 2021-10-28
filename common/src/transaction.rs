@@ -1,8 +1,8 @@
 use crate::did::EventHash;
-use ic_kit::candid::{CandidType, Deserialize, Nat};
+use ic_kit::candid::{CandidType, Deserialize};
 use ic_kit::Principal;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use std::collections::BTreeSet;
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
@@ -11,43 +11,44 @@ pub struct Event {
     pub time: u64,
     /// The caller that initiated the call on the token contract.
     pub caller: Principal,
-    /// The status of the event, can be either `running`, `completed` or `failed`.
-    pub status: EventStatus,
+    /// The amount of tokens that was touched in this event.
+    pub amount: u64,
+    /// The fee captured by the token contract.
+    pub fee: u64,
+    /// The transaction memo.
+    pub memo: u32,
+    /// The `from` field, only needs to be non-null for transferFrom kind of events.
+    pub from: Option<Principal>,
+    /// The receiver end of this transaction.
+    pub to: Principal,
     /// The operation that took place.
-    pub operation: String,
-    /// Details of the transaction.
-    pub details: Vec<(String, DetailValue)>,
+    pub operation: Operation,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum EventStatus {
-    Running,
-    Completed,
-    Failed,
+pub enum Operation {
+    Transfer,
+    Approve,
+    Mint,
+    Burn,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub struct IndefiniteEvent {
     /// The caller that initiated the call on the token contract.
     pub caller: Principal,
-    /// The status of the event, can be either `running`, `completed` or `failed`.
-    pub status: EventStatus,
+    /// The amount of tokens that was touched in this event.
+    pub amount: u64,
+    /// The fee captured by the token contract.
+    pub fee: u64,
+    /// The transaction memo.
+    pub memo: u32,
+    /// The `from` field, only needs to be non-null for transferFrom kind of events.
+    pub from: Option<Principal>,
+    /// The receiver end of this transaction.
+    pub to: Principal,
     /// The operation that took place.
-    pub operation: String,
-    /// Details of the transaction.
-    pub details: Vec<(String, DetailValue)>,
-}
-
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum DetailValue {
-    U64(u64),
-    I64(i64),
-    Float(f64),
-    Text(String),
-    Principal(Principal),
-    #[serde(with = "serde_bytes")]
-    Slice(Vec<u8>),
-    Vec(Box<Vec<DetailValue>>),
+    pub operation: Operation,
 }
 
 impl Event {
@@ -57,82 +58,34 @@ impl Event {
         let mut principals = BTreeSet::new();
 
         principals.insert(&self.caller);
-
-        // TODO(qti3e) Support nested extractions.
-        for (_, value) in &self.details {
-            match value {
-                DetailValue::Principal(p) => {
-                    principals.insert(p);
-                }
-                _ => {}
-            }
+        if let Some(from) = &self.from {
+            principals.insert(from);
         }
+        principals.insert(&self.to);
 
         principals
     }
 
     /// Compute the hash for the given event.
     pub fn hash(&self) -> EventHash {
-        let mut h = domain_sep(&self.operation);
+        let mut h = match &self.operation {
+            Operation::Transfer => domain_sep("transfer"),
+            Operation::Approve => domain_sep("approve"),
+            Operation::Mint => domain_sep("mint"),
+            Operation::Burn => domain_sep("burn"),
+        };
 
         h.update(&self.time.to_be_bytes() as &[u8]);
-        let caller = self.caller.as_slice();
-        h.update(&caller.len().to_be_bytes() as &[u8]);
-        h.update(caller);
+        h.update(&self.amount.to_be_bytes());
+        h.update(&self.fee.to_be_bytes());
+        h.update(&self.memo.to_be_bytes());
 
-        fn hash_value(h: &mut Sha256, value: &DetailValue) {
-            match value {
-                DetailValue::U64(val) => {
-                    let bytes = val.to_be_bytes();
-                    h.update(&[0]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::I64(val) => {
-                    let bytes = val.to_be_bytes();
-                    h.update(&[1]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::Float(val) => {
-                    let bytes = val.to_be_bytes();
-                    h.update(&[2]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::Text(val) => {
-                    let bytes = val.as_str().as_bytes();
-                    h.update(&[3]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::Principal(val) => {
-                    let bytes = val.as_slice();
-                    h.update(&[4]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::Slice(val) => {
-                    let bytes = val.as_slice();
-                    h.update(&[5]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
-                }
-                DetailValue::Vec(val) => {
-                    h.update(&[6]);
-                    h.update(&val.len().to_be_bytes() as &[u8]);
-                    for item in val.iter() {
-                        hash_value(h, item);
-                    }
-                }
-            }
+        // And now all of the Principal IDs
+        h.update(&self.caller);
+        if let Some(from) = &self.from {
+            h.update(from);
         }
-
-        for (key, value) in &self.details {
-            h.update(&key.len().to_be_bytes() as &[u8]);
-            h.update(key.as_str().as_bytes());
-            hash_value(&mut h, value);
-        }
+        h.update(&self.to);
 
         h.finalize().into()
     }
@@ -145,9 +98,12 @@ impl IndefiniteEvent {
         Event {
             time,
             caller: self.caller,
-            status: self.status,
+            amount: self.amount,
+            fee: self.fee,
+            memo: self.memo,
+            from: self.from,
+            to: self.to,
             operation: self.operation,
-            details: self.details,
         }
     }
 }

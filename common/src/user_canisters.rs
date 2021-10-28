@@ -19,7 +19,7 @@ impl UserCanisters {
             modified = true;
         });
         if !modified {
-            let mut list = CanisterList::new();
+            let mut list = CanisterList::default();
             list.push(canister);
             self.data.insert(user, list);
             self.len += 1;
