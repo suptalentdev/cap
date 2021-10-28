@@ -314,33 +314,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cap-sdk"
-version = "1.0.0-alpha1"
-dependencies = [
- "cap-sdk-core",
- "futures",
- "ic-kit",
- "thiserror",
-]
-
-[[package]]
-name = "cap-sdk-core"
-version = "1.0.0-alpha1"
-dependencies = [
- "ic-history-common",
- "ic-kit",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "cap-standards"
-version = "1.0.0-alpha1"
-dependencies = [
- "ic-history-common",
-]
-
-[[package]]
 name = "cc"
 version = "1.0.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
