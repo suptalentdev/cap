@@ -1,7 +1,7 @@
 use ic_certified_map::HashTree::Leaf;
 use ic_certified_map::{leaf_hash, AsHashTree, Hash, HashTree, RbTree};
 use ic_kit::Principal;
-use serde::de::{MapAccess, Visitor};
+use serde::de::{EnumAccess, Error, MapAccess, SeqAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Formatter;
@@ -105,11 +105,13 @@ impl<'de> Visitor<'de> for CanisterMapVisitor {
         A: MapAccess<'de>,
     {
         let mut data = CanisterMap::default();
-
-        while let Some((key, value)) = map.next_entry::<Principal, Principal>()? {
-            data.insert(key, value);
+        loop {
+            if let Some((key, value)) = map.next_entry::<Principal, Principal>()? {
+                data.insert(key, value);
+            } else {
+                break;
+            }
         }
-
         Ok(data)
     }
 }

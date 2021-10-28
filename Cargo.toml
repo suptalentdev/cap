@@ -3,9 +3,6 @@ members = [
     "common",
     "canisters/router",
     "canisters/root",
-    "sdk/core",
-    "sdk",
-    "sdk/standards"
 ]
 
 [profile.release]
