@@ -1,7 +1,7 @@
 use ic_certified_map::{fork, fork_hash, AsHashTree, HashTree};
 use ic_history_common::bucket_lookup_table::BucketLookupTable;
 use ic_history_common::canister_list::CanisterList;
-use ic_history_common::transaction::{Event, IndefiniteEvent};
+use ic_history_common::transaction::IndefiniteEvent;
 use ic_history_common::Bucket;
 use ic_kit::candid::{candid_method, export_service};
 use ic_kit::{ic, Principal};
@@ -28,12 +28,10 @@ struct Data {
     bucket: Bucket,
     buckets: BucketLookupTable,
     next_canisters: CanisterList,
-    /// List of all the users in this token contract.
     users: BTreeSet<Principal>,
     cap_id: Principal,
     contract: TokenContractId,
     writers: BTreeSet<TokenContractId>,
-    allow_migration: bool,
 }
 
 impl Default for Data {
@@ -50,7 +48,6 @@ impl Default for Data {
             cap_id: Principal::management_canister(),
             contract: Principal::management_canister(),
             writers: BTreeSet::new(),
-            allow_migration: true,
         }
     }
 }
@@ -209,7 +206,7 @@ fn time() -> u64 {
 }
 
 #[update]
-#[candid_method(update)]
+#[candid_method(query)]
 fn insert(event: IndefiniteEvent) -> TransactionId {
     let data = ic::get_mut::<Data>();
     let caller = ic::caller();
@@ -235,52 +232,12 @@ fn insert(event: IndefiniteEvent) -> TransactionId {
 
     let id = data.bucket.insert(&data.contract, event);
 
-    data.allow_migration = false;
-
     ic::set_certified_data(&fork_hash(
         &fork_hash(&data.bucket.root_hash(), &data.buckets.root_hash()),
         &data.next_canisters.root_hash(),
     ));
 
     id
-}
-
-#[update]
-#[candid_method(update)]
-fn migrate(events: Vec<Event>) {
-    let data = ic::get_mut::<Data>();
-    let caller = ic::caller();
-
-    if !(caller == data.contract || data.writers.contains(&caller)) {
-        panic!("The method can only be invoked by one of the writers.");
-    }
-
-    if !data.allow_migration {
-        panic!("Migration is not allowed after an insert.")
-    }
-
-    let mut new_users = Vec::new();
-
-    for event in events {
-        for principal in event.extract_principal_ids() {
-            if data.users.insert(*principal) {
-                new_users.push(*principal);
-            }
-        }
-
-        data.bucket.insert(&data.contract, event);
-    }
-
-    ic_cdk::block_on(write_new_users_to_cap(
-        data.cap_id,
-        data.contract,
-        new_users,
-    ));
-
-    ic::set_certified_data(&fork_hash(
-        &fork_hash(&data.bucket.root_hash(), &data.buckets.root_hash()),
-        &data.next_canisters.root_hash(),
-    ));
 }
 
 async fn write_new_users_to_cap(cap_id: Principal, contract_id: Principal, users: Vec<Principal>) {
