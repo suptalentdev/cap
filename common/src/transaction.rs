@@ -1,10 +1,9 @@
 use crate::did::EventHash;
-use ic_kit::candid::{CandidType, Deserialize, Nat};
+use ic_kit::candid::{CandidType, Deserialize};
 use ic_kit::Principal;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
-use std::convert::TryInto;
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub struct Event {
@@ -12,8 +11,6 @@ pub struct Event {
     pub time: u64,
     /// The caller that initiated the call on the token contract.
     pub caller: Principal,
-    /// The status of the event, can be either `running`, `completed` or `failed`.
-    pub status: EventStatus,
     /// The operation that took place.
     pub operation: String,
     /// Details of the transaction.
@@ -21,18 +18,9 @@ pub struct Event {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
-pub enum EventStatus {
-    Running,
-    Completed,
-    Failed,
-}
-
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub struct IndefiniteEvent {
     /// The caller that initiated the call on the token contract.
     pub caller: Principal,
-    /// The status of the event, can be either `running`, `completed` or `failed`.
-    pub status: EventStatus,
     /// The operation that took place.
     pub operation: String,
     /// Details of the transaction.
@@ -41,6 +29,8 @@ pub struct IndefiniteEvent {
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug)]
 pub enum DetailValue {
+    True,
+    False,
     U64(u64),
     I64(i64),
     Float(f64),
@@ -59,14 +49,22 @@ impl Event {
 
         principals.insert(&self.caller);
 
-        // TODO(qti3e) Support nested extractions.
-        for (_, value) in &self.details {
+        fn visit<'a>(principals: &mut BTreeSet<&'a Principal>, value: &'a DetailValue) {
             match value {
                 DetailValue::Principal(p) => {
                     principals.insert(p);
                 }
+                DetailValue::Vec(items) => {
+                    for item in items {
+                        visit(principals, item);
+                    }
+                }
                 _ => {}
             }
+        }
+
+        for (_, value) in &self.details {
+            visit(&mut principals, value);
         }
 
         principals
@@ -83,44 +81,50 @@ impl Event {
 
         fn hash_value(h: &mut Sha256, value: &DetailValue) {
             match value {
-                DetailValue::U64(val) => {
-                    let bytes = val.to_be_bytes();
+                DetailValue::True => {
                     h.update(&[0]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
                 }
-                DetailValue::I64(val) => {
-                    let bytes = val.to_be_bytes();
+                DetailValue::False => {
                     h.update(&[1]);
-                    h.update(&bytes.len().to_be_bytes() as &[u8]);
-                    h.update(bytes);
                 }
-                DetailValue::Float(val) => {
+                DetailValue::U64(val) => {
                     let bytes = val.to_be_bytes();
                     h.update(&[2]);
                     h.update(&bytes.len().to_be_bytes() as &[u8]);
                     h.update(bytes);
                 }
+                DetailValue::I64(val) => {
+                    let bytes = val.to_be_bytes();
+                    h.update(&[3]);
+                    h.update(&bytes.len().to_be_bytes() as &[u8]);
+                    h.update(bytes);
+                }
+                DetailValue::Float(val) => {
+                    let bytes = val.to_be_bytes();
+                    h.update(&[4]);
+                    h.update(&bytes.len().to_be_bytes() as &[u8]);
+                    h.update(bytes);
+                }
                 DetailValue::Text(val) => {
                     let bytes = val.as_str().as_bytes();
-                    h.update(&[3]);
+                    h.update(&[5]);
                     h.update(&bytes.len().to_be_bytes() as &[u8]);
                     h.update(bytes);
                 }
                 DetailValue::Principal(val) => {
                     let bytes = val.as_slice();
-                    h.update(&[4]);
+                    h.update(&[6]);
                     h.update(&bytes.len().to_be_bytes() as &[u8]);
                     h.update(bytes);
                 }
                 DetailValue::Slice(val) => {
                     let bytes = val.as_slice();
-                    h.update(&[5]);
+                    h.update(&[7]);
                     h.update(&bytes.len().to_be_bytes() as &[u8]);
                     h.update(bytes);
                 }
                 DetailValue::Vec(val) => {
-                    h.update(&[6]);
+                    h.update(&[8]);
                     h.update(&val.len().to_be_bytes() as &[u8]);
                     for item in val.iter() {
                         hash_value(h, item);
@@ -146,125 +150,8 @@ impl IndefiniteEvent {
         Event {
             time,
             caller: self.caller,
-            status: self.status,
             operation: self.operation,
             details: self.details,
-        }
-    }
-}
-
-impl From<u64> for DetailValue {
-    fn from(num: u64) -> Self {
-        Self::U64(num)
-    }
-}
-
-impl TryInto<u64> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<u64, Self::Error> {
-        if let Self::U64(num) = self {
-            Ok(num)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<i64> for DetailValue {
-    fn from(num: i64) -> Self {
-        Self::I64(num)
-    }
-}
-
-impl TryInto<i64> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<i64, Self::Error> {
-        if let Self::I64(num) = self {
-            Ok(num)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<f64> for DetailValue {
-    fn from(float: f64) -> Self {
-        Self::Float(float)
-    }
-}
-
-impl TryInto<f64> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<f64, Self::Error> {
-        if let Self::Float(num) = self {
-            Ok(num)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<String> for DetailValue {
-    fn from(string: String) -> Self {
-        Self::Text(string)
-    }
-}
-
-impl TryInto<String> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<String, Self::Error> {
-        if let Self::Text(num) = self {
-            Ok(num)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<Principal> for DetailValue {
-    fn from(principal: Principal) -> Self {
-        Self::Principal(principal)
-    }
-}
-
-impl TryInto<Principal> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<Principal, Self::Error> {
-        if let Self::Principal(principal) = self {
-            Ok(principal)
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<Nat> for DetailValue {
-    fn from(nat: Nat) -> Self {
-        let mut vec = vec![];
-
-        nat.encode(&mut vec).unwrap();
-
-        DetailValue::Slice(vec)
-    }
-}
-
-impl TryInto<Nat> for DetailValue {
-    type Error = ();
-
-    fn try_into(self) -> Result<Nat, Self::Error> {
-        if let Self::Slice(nat) = self {
-            if let Ok(nat) = Nat::parse(&nat) {
-                Ok(nat)
-            } else {
-                Err(())
-            }
-        } else {
-            Err(())
         }
     }
 }
