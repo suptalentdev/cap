@@ -13,7 +13,6 @@ use ic_history_common::*;
 use ic_kit::macros::*;
 
 mod installer;
-mod plug;
 mod upgrade;
 
 /// Merkle tree of the canister.
@@ -78,7 +77,7 @@ fn get_token_contract_root_bucket(
 
 #[query]
 #[candid_method(query)]
-fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse<'static> {
+fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse {
     let data = ic::get::<Data>();
 
     let witness = match arg.witness {
@@ -95,7 +94,7 @@ fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsRespon
         ),
     };
 
-    let contracts = data.user_canisters.get(&arg.user);
+    let contracts = data.user_canisters.get(&arg.user).to_vec();
 
     GetUserRootBucketsResponse { contracts, witness }
 }
