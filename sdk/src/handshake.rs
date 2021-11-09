@@ -13,33 +13,19 @@ use crate::CapEnv;
 /// creates the root bucket for this contract and gives it `creation_cycles`
 /// cycles.
 pub fn handshake(creation_cycles: u64, router_override: Option<Principal>) {
-    let mut controllers = Vec::new();
-
+    ic::print("starting handshake");
     let arg = management::CreateCanisterArgument { settings: None };
 
     let router = {
         if let Some(router_override) = router_override {
-            controllers.push(router_override);
             Router::new(router_override)
         } else {
-            let p = Principal::from_str("lj532-6iaaa-aaaah-qcc7a-cai").unwrap();
-            controllers.push(p);
-            Router::new(p)
+            Router::new(Principal::from_str("lj532-6iaaa-aaaah-qcc7a-cai").unwrap())
         }
     };
 
-    let create_settings = management::CanisterSettings {
-        controllers: Some(controllers),
-        compute_allocation: None,
-        memory_allocation: None,
-        freezing_threshold: None,
-    };
-
-    let arg = management::CreateCanisterArgument {
-        settings: Some(create_settings),
-    };
-
     let closure = async move {
+        ic::print("inside closure");
         let index: Index = router.into();
 
         if let Ok(bucket) = index.get_token_contract_root_bucket(ic::id()).await {
@@ -53,9 +39,13 @@ pub fn handshake(creation_cycles: u64, router_override: Option<Principal>) {
             .await
             .expect("Failed to create canister");
 
+            ic::print("created root canister");
+
             let canister_id = res.canister_id;
 
             router.install_code(canister_id).await.unwrap();
+
+            ic::print("installed root canister");
 
             let root_bucket = index
                 .get_token_contract_root_bucket(ic::id())
