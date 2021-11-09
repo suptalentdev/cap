@@ -57,4 +57,3 @@ switch (buildType)
 
 buildWasm('ic-history-root', [...buildCommand], history_suffix, target_dir);
 buildWasm('ic-history-router', [...buildCommand], history_suffix, target_dir);
-buildWasm('sdk-example', [...buildCommand], history_suffix, target_dir);
