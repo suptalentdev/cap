@@ -5,7 +5,7 @@ use ic_history_common::canister_map::CanisterMap;
 use ic_history_common::user_canisters::UserCanisters;
 use ic_kit::candid::{candid_method, export_service};
 use ic_kit::ic;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 // It's ok.
 use ic_cdk::export::Principal;
@@ -26,14 +26,14 @@ mod upgrade;
 ///     /   \
 ///   / \    2
 ///  0   1
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct Data {
     /// Map: TokenContractId -> RootBucketId
-    pub root_buckets: CanisterMap,
+    root_buckets: CanisterMap,
     /// Map each user to RootBucketId
-    pub user_canisters: UserCanisters,
+    user_canisters: UserCanisters,
     /// List of the index canisters.
-    pub index_canisters: CanisterList,
+    index_canisters: CanisterList,
 }
 
 impl Default for Data {
@@ -78,7 +78,7 @@ fn get_token_contract_root_bucket(
 
 #[query]
 #[candid_method(query)]
-fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse<'static> {
+fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsResponse {
     let data = ic::get::<Data>();
 
     let witness = match arg.witness {
@@ -95,7 +95,7 @@ fn get_user_root_buckets(arg: GetUserRootBucketsArg) -> GetUserRootBucketsRespon
         ),
     };
 
-    let contracts = data.user_canisters.get(&arg.user);
+    let contracts = data.user_canisters.get(&arg.user).to_vec();
 
     GetUserRootBucketsResponse { contracts, witness }
 }
